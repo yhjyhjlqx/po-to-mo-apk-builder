@@ -1,0 +1,39 @@
+name: Heavy Task Runner
+
+on:
+  repository_dispatch:
+    types: ['run-heavy-task'] # 必须与trigger.js的event_type一致
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write
+      packages: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ==================== 必须修改开始 ====================
+      - name: 解析客户端参数
+        id: payload
+        run: |
+          echo "FILE=$(jq -r '.client_payload.file' <<< '${{ toJson(github.event.client_payload) }}')" >> $GITHUB_OUTPUT
+          echo "TIMESTAMP=$(jq -r '.client_payload.build_time' <<< '${{ toJson(github.event.client_payload) }}')" >> $GITHUB_OUTPUT
+      # ==================== 必须修改结束 ====================
+
+      - run: chmod +x scripts/*
+      - run: ./scripts/android-setup.sh
+      - run: ./scripts/build-apk.sh "${{ steps.payload.outputs.FILE }}"
+
+      # ==================== 必须修改开始 ====================
+      - name: 上传产物
+        uses: actions/upload-artifact@v3
+        with:
+          name: apk-artifacts
+          path: |
+            app-release.apk
+            build.log
+          retention-days: 3
+      # ==================== 必须修改结束 ====================
