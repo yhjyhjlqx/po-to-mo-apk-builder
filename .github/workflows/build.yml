@@ -1,0 +1,46 @@
+name: Build Pipeline
+on: 
+  repository_dispatch:
+    types: [build-apk]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      actions: write
+      packages: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Android
+        run: |
+          chmod +x scripts/*.sh
+          ./scripts/android-setup.sh
+          echo "ANDROID_HOME=$HOME/android-sdk" >> $GITHUB_ENV
+
+      - name: Build APK
+        run: |
+          ./scripts/build-apk.sh || {
+            echo "::warning::首次构建失败，尝试降级Gradle版本..."
+            sed -i 's/gradle:[0-9.]\+/gradle:7.0.2/' android-project/gradle/wrapper/gradle-wrapper.properties
+            ./scripts/build-apk.sh
+          }
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: apk-artifacts
+          path: |
+            android-project/app/build/outputs/apk/release/*.apk
+            output.mo
+          retention-days: 7
+
+      - name: Verify Deployment
+        run: npm run verify
+        env:
+          VERCEL_URL: https://po-to-mo-apk-builder.vercel.app
